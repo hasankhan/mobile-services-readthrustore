@@ -1,5 +1,5 @@
-MobileServiceReadthruStore
-==========================
+MobileService ReadthruStore
+===========================
 
 A sample readthru local store implementation for Azure Mobile Services client SDK that allows you to make your online apps faster without having you to think about offline/sync. For all read queries it will first look into local SQLite cache and if the data is not found, it will read the data from remote store and also update the cache. To refresh the cache you can simply purge the local table and read from it again.
 
@@ -11,7 +11,7 @@ Getting Started
 * Create a new Mobile Service in Azure
 * Download the Quick Start Todo sample for Windows Store
 * Install WindowsAzure.MobileService.SQLiteStore 1.0.0-alpha
-* Install MobileServiceReadthruStore 1.0.0-alpha
+* Install [MobileServiceReadthruStore 1.0.0-alpha](https://www.nuget.org/packages/MobileServiceReadthruStore)
 * Replace the GetTable<TodoItem> call in MainPage with GetSyncTable<TodoItem>()
 * Change the OnNavigatedTo as follows:
 
