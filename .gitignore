@@ -2,8 +2,5 @@ bin
 obj
 *.suo
 *.user
-# NuGet Packages Directory
-packages/
-
+packages
 *.nupkg
-*.nuspec

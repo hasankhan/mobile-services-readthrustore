@@ -10,8 +10,8 @@ Getting Started
 
 * Create a new Mobile Service in Azure
 * Download the Quick Start Todo sample for Windows Store
-* Install WindowsAzure.MobileService.SQLiteStore 1.0.0-alpha
-* Install [MobileServiceReadthruStore 1.0.0-alpha](https://www.nuget.org/packages/MobileServiceReadthruStore)
+* Install WindowsAzure.MobileService.SQLiteStore 1.0.0-beta
+* Install [MobileServiceReadthruStore 1.0.0-beta](https://www.nuget.org/packages/MobileServiceReadthruStore)
 * Replace the GetTable<TodoItem> call in MainPage with GetSyncTable<TodoItem>()
 * Change the OnNavigatedTo as follows:
 
