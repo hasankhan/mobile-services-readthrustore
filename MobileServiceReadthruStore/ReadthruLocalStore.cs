@@ -1,8 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.WindowsAzure.MobileServices;
 using Microsoft.WindowsAzure.MobileServices.Query;
@@ -14,7 +12,7 @@ namespace MobileServiceReadthruStore
     /// <summary>
     /// An implementation of <see cref="IMobileServiceLocalStore"/> that acts like a local cache
     /// </summary>
-    public sealed class ReadthruLocalStore: IMobileServiceLocalStore
+    public sealed class ReadthruLocalStore : MobileServiceLocalStore
     {
         private IMobileServiceLocalStore store;
         private IMobileServiceClient client;
@@ -25,12 +23,13 @@ namespace MobileServiceReadthruStore
             this.client = client;
         }
 
-        public Task InitializeAsync()
+        protected override async Task OnInitialize()
         {
-            return this.store.InitializeAsync();
+            await base.OnInitialize();
+            await this.store.InitializeAsync();
         }
 
-        public async Task<JObject> LookupAsync(string tableName, string id)
+        public override async Task<JObject> LookupAsync(string tableName, string id)
         {
             JObject result = await this.store.LookupAsync(tableName, id);
             if (result == null && !IsSystemTable(tableName))
@@ -38,35 +37,32 @@ namespace MobileServiceReadthruStore
                 // get data from remote table
                 result = await this.client.GetTable(tableName).LookupAsync(id) as JObject;
                 // add data to local store
-                await this.store.UpsertAsync(tableName, result, fromServer: true);
+                await this.store.UpsertAsync(tableName, new[] { result }, fromServer: true);
             }
             return result;
-        }        
+        }
 
-        public async Task<JToken> ReadAsync(MobileServiceTableQueryDescription query)
+        public override async Task<JToken> ReadAsync(MobileServiceTableQueryDescription query)
         {
             // first lookup in local store
             JToken result = await this.store.ReadAsync(query);
-            var items = GetItems(result);
+            JArray items = GetItems(result);
 
             // if local store does not have results
             if ((items == null || items.Count == 0) && !IsSystemTable(query.TableName))
             {
                 // then lookup the server
-                result = await this.client.GetTable(query.TableName).ReadAsync(query.ToQueryString());
+                result = await this.client.GetTable(query.TableName).ReadAsync(query.ToODataString());
                 items = GetItems(result);
 
                 // insert the results in the local store
-                foreach (JObject item in items)
-                {
-                    await this.store.UpsertAsync(query.TableName, item, fromServer: true);
-                }
+                await this.store.UpsertAsync(query.TableName, items.Cast<JObject>(), fromServer: true);
             }
 
             return result;
         }
 
-        public async Task DeleteAsync(string tableName, string id)
+        public override async Task DeleteAsync(string tableName, IEnumerable<string> ids)
         {
             // ignore operations on system tables as we are in readthru mode
             if (IsSystemTable(tableName))
@@ -74,14 +70,17 @@ namespace MobileServiceReadthruStore
                 return;
             }
 
-            await this.client.GetTable(tableName).DeleteAsync(new JObject() { { "id", id } });
-            await this.store.DeleteAsync(tableName, id);
+            foreach (string id in ids)
+            {
+                await this.client.GetTable(tableName).DeleteAsync(new JObject() { { "id", id } });
+            }
+            await this.store.DeleteAsync(tableName, ids);
 
             // clear the sync queue
             await this.client.SyncContext.PushAsync();
         }
 
-        public async Task DeleteAsync(MobileServiceTableQueryDescription query)
+        public override async Task DeleteAsync(MobileServiceTableQueryDescription query)
         {
             // ignore operations on system tables as we are in readthru mode
             if (IsSystemTable(query.TableName))
@@ -90,9 +89,9 @@ namespace MobileServiceReadthruStore
             }
 
             await this.store.DeleteAsync(query);
-        }        
+        }
 
-        public async Task UpsertAsync(string tableName, JObject item, bool fromServer)
+        public override async Task UpsertAsync(string tableName, IEnumerable<JObject> items, bool fromServer)
         {
             // ignore operations on system tables as we are in readthru mode
             if (IsSystemTable(tableName))
@@ -100,32 +99,37 @@ namespace MobileServiceReadthruStore
                 return;
             }
 
+
             var remoteTable = this.client.GetTable(tableName);
-            bool tryInsert = false;
-            try
+            foreach (JObject item in items)
             {
-                // we don't know if it exists on server or not so always do an update first
-                item = await remoteTable.UpdateAsync(item) as JObject;
-            }
-            catch (MobileServiceInvalidOperationException ex)
-            {
-                if (ex.Response.StatusCode != HttpStatusCode.NotFound)
+                JObject localItem = item;
+                bool tryInsert = false;
+                try
                 {
-                    throw;
+                    // we don't know if it exists on server or not so always do an update first
+                    localItem = await remoteTable.UpdateAsync(item) as JObject;
                 }
-                // if item does not exist on server, we will try to insert
-                tryInsert = true;
-            }
+                catch (MobileServiceInvalidOperationException ex)
+                {
+                    if (ex.Response.StatusCode != HttpStatusCode.NotFound)
+                    {
+                        throw;
+                    }
+                    // if item does not exist on server, we will try to insert
+                    tryInsert = true;
+                }
 
-            if (tryInsert)
-            {
-                // you can modify the server script to insert on update if item does
-                // not exist and this line would not be necessary in that case
-                item = await remoteTable.InsertAsync(item) as JObject;
-            }
+                if (tryInsert)
+                {
+                    // you can modify the server script to insert on update if item does
+                    // not exist and this line would not be necessary in that case
+                    localItem = await remoteTable.InsertAsync(item) as JObject;
+                }
 
-            // upsert on local store
-            await this.store.UpsertAsync(tableName, item, fromServer);
+                // upsert on local store
+                await this.store.UpsertAsync(tableName, new[] { localItem }, fromServer);
+            }
 
             // clear the sync queue
             await this.client.SyncContext.PushAsync();
